@@ -1,46 +1,44 @@
-# How to install a new skill scaffold
+# How to install skills
 
-Script dùng để tạo khung skill:
+## Quick install from GitHub (recommended)
 
-```bash
-bin/install <ten-skill>
-```
-
-Ví dụ:
+Use this one-liner from any folder:
 
 ```bash
-bin/install my-skill
+curl -fsSL https://raw.githubusercontent.com/Code-Vo-Van/skills/main/bin/install | bash -s -- linkedin
 ```
 
-Sau khi chạy, cấu trúc được tạo:
+This creates:
 
 ```text
-.agents/skill/my-skill/
+.agents/skill/linkedin/
   SKILL.md
-  scripts/.gitkeep
-  references/.gitkeep
+  scripts/
+  references/
 ```
 
-## Quy tắc tên skill
+## Install using local repo script
 
-- Không chứa dấu cách
-- Không chứa `/`
-- Chỉ nên dùng: chữ cái, số, `.`, `_`, `-`
-
-## Lỗi thường gặp
-
-- `destination already exists`: thư mục skill đã tồn tại → đổi tên khác hoặc xóa thư mục cũ.
-- `invalid skill name`: tên chưa đúng format theo quy tắc phía trên.
-
-## Available skill in this repo
-
-- `lindkedin` (LinkedIn posting flow)  
-  Path: `lindkedin/SKILL.md`
-
-If you run:
+If you already cloned this repo:
 
 ```bash
 bin/install linkedin
 ```
 
-the installer will copy from local source `lindkedin/` into `.agents/skill/linkedin/`.
+## List installable skills
+
+```bash
+bin/install --list
+```
+
+## Create a new starter scaffold
+
+Use `--scaffold` when you want a blank template instead of downloading an existing skill:
+
+```bash
+bin/install --scaffold my-new-skill
+```
+
+## Available skill(s) in this repo
+
+- `linkedin` (source folder: `lindkedin/`)

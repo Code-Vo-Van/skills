@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DEFAULT_REPO="Code-Vo-Van/skills"
+DEFAULT_REF="main"
+INDEX_FILE="skills-index.tsv"
+
 usage() {
   cat <<'EOF'
-Usage: bin/install <skill-name>
+Usage:
+  bin/install <skill-name> [--repo <owner/repo>] [--ref <git-ref>]
+  bin/install --scaffold <skill-name>
+  bin/install --list [--repo <owner/repo>] [--ref <git-ref>]
 
 Creates:
   .agents/skill/<skill-name>/
@@ -12,17 +19,84 @@ Creates:
     references/
 
 Behavior:
-  - If a local source skill exists, install by copying SKILL.md + scripts + references.
-  - Otherwise create a starter scaffold.
+  - Install from local source if available.
+  - Else install from GitHub index (<repo>/<ref>).
+  - Use --scaffold to force starter template creation.
 EOF
 }
 
-if [[ $# -ne 1 ]]; then
+skill_name=""
+repo="$DEFAULT_REPO"
+ref="$DEFAULT_REF"
+scaffold_only=0
+list_only=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      repo="${2:-}"
+      shift 2
+      ;;
+    --ref)
+      ref="${2:-}"
+      shift 2
+      ;;
+    --scaffold)
+      scaffold_only=1
+      shift
+      ;;
+    --list)
+      list_only=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "Error: unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [[ -n "$skill_name" ]]; then
+        echo "Error: only one <skill-name> is supported." >&2
+        usage >&2
+        exit 1
+      fi
+      skill_name="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ "$list_only" -eq 1 ]]; then
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' EXIT
+  raw_index_url="https://raw.githubusercontent.com/${repo}/${ref}/${INDEX_FILE}"
+  if ! curl -fsSL "$raw_index_url" -o "$tmpdir/index.tsv" 2>/dev/null; then
+    echo "Error: could not download skill index: $raw_index_url" >&2
+    exit 1
+  fi
+  echo "Skills from ${repo}@${ref}:"
+  awk -F'\t' '
+    /^#/ { next }
+    NF >= 2 {
+      desc = (NF >= 3 ? $3 : "")
+      if (desc != "") {
+        printf "- %s: %s\n", $1, desc
+      } else {
+        printf "- %s\n", $1
+      }
+    }
+  ' "$tmpdir/index.tsv"
+  exit 0
+fi
+
+if [[ -z "$skill_name" ]]; then
   usage >&2
   exit 1
 fi
-
-skill_name="$1"
 
 if [[ "$skill_name" =~ [[:space:]/] ]]; then
   echo "Error: skill name must not contain spaces or '/': $skill_name" >&2
@@ -35,25 +109,28 @@ if [[ ! "$skill_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
   exit 1
 fi
 
-dest=".agents/skill/$skill_name"
+lookup_skill_source() {
+  local query="$1"
+  local index_path="$2"
+  awk -F'\t' -v q="$query" '
+    BEGIN { q = tolower(q) }
+    /^#/ { next }
+    NF >= 2 {
+      if (tolower($1) == q) {
+        print $2
+        exit
+      }
+    }
+  ' "$index_path"
+}
 
-if [[ -e "$dest" ]]; then
-  echo "Error: destination already exists: $dest" >&2
-  exit 1
-fi
+copy_skill_dir() {
+  local source_dir="$1"
+  local dest="$2"
 
-mkdir -p "$dest/scripts" "$dest/references"
-
-source_dir=""
-if [[ -f "$skill_name/SKILL.md" ]]; then
-  source_dir="$skill_name"
-elif [[ "$skill_name" == "linkedin" && -f "lindkedin/SKILL.md" ]]; then
-  # Backward-compatible alias for existing local skill folder name.
-  source_dir="lindkedin"
-fi
-
-if [[ -n "$source_dir" ]]; then
+  mkdir -p "$dest/scripts" "$dest/references"
   cp "$source_dir/SKILL.md" "$dest/SKILL.md"
+
   if [[ -d "$source_dir/scripts" ]]; then
     cp -a "$source_dir/scripts/." "$dest/scripts/"
   fi
@@ -61,25 +138,25 @@ if [[ -n "$source_dir" ]]; then
     cp -a "$source_dir/references/." "$dest/references/"
   fi
 
-  # Keep empty dirs tracked when source had none.
   if [[ -z "$(ls -A "$dest/scripts" 2>/dev/null)" ]]; then
     touch "$dest/scripts/.gitkeep"
   fi
   if [[ -z "$(ls -A "$dest/references" 2>/dev/null)" ]]; then
     touch "$dest/references/.gitkeep"
   fi
+}
 
-  echo "Installed skill from local source: $source_dir -> $dest"
-  exit 0
-fi
-
-cat >"$dest/SKILL.md" <<EOF
+create_scaffold() {
+  local skill="$1"
+  local dest="$2"
+  mkdir -p "$dest/scripts" "$dest/references"
+  cat >"$dest/SKILL.md" <<EOF
 ---
-name: $skill_name
+name: $skill
 description: TODO - add a short description
 ---
 
-# $skill_name
+# $skill
 
 ## Purpose
 TODO
@@ -96,7 +173,70 @@ TODO
 ## Output
 - TODO
 EOF
+  touch "$dest/scripts/.gitkeep" "$dest/references/.gitkeep"
+  echo "Created starter skill scaffold at: $dest"
+}
 
-touch "$dest/scripts/.gitkeep" "$dest/references/.gitkeep"
+dest=".agents/skill/$skill_name"
 
-echo "Created starter skill scaffold at: $dest"
+if [[ -e "$dest" ]]; then
+  echo "Error: destination already exists: $dest" >&2
+  exit 1
+fi
+
+source_dir=""
+if [[ -f "$skill_name/SKILL.md" ]]; then
+  source_dir="$skill_name"
+elif [[ -f "$INDEX_FILE" ]]; then
+  mapped="$(lookup_skill_source "$skill_name" "$INDEX_FILE")"
+  if [[ -n "$mapped" && -f "$mapped/SKILL.md" ]]; then
+    source_dir="$mapped"
+  fi
+fi
+
+if [[ -n "$source_dir" ]]; then
+  copy_skill_dir "$source_dir" "$dest"
+  echo "Installed skill from local source: $source_dir -> $dest"
+  exit 0
+fi
+
+# Remote install path (GitHub index + tarball).
+if [[ "$scaffold_only" -ne 1 ]]; then
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  raw_index_url="https://raw.githubusercontent.com/${repo}/${ref}/${INDEX_FILE}"
+  if curl -fsSL "$raw_index_url" -o "$tmpdir/index.tsv" 2>/dev/null; then
+    remote_mapped="$(lookup_skill_source "$skill_name" "$tmpdir/index.tsv")"
+    if [[ -n "$remote_mapped" ]]; then
+      archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
+      curl -fsSL "$archive_url" -o "$tmpdir/repo.tar.gz"
+      tar -xzf "$tmpdir/repo.tar.gz" -C "$tmpdir"
+
+      extracted_root="$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d ! -name 'tmp.*' | head -n 1)"
+      if [[ -z "$extracted_root" ]]; then
+        echo "Error: failed to extract repository archive from $archive_url" >&2
+        exit 1
+      fi
+
+      remote_source_dir="$extracted_root/$remote_mapped"
+      if [[ ! -f "$remote_source_dir/SKILL.md" ]]; then
+        echo "Error: remote skill path is invalid: $remote_mapped" >&2
+        exit 1
+      fi
+
+      copy_skill_dir "$remote_source_dir" "$dest"
+      echo "Installed skill from GitHub: ${repo}@${ref}:${remote_mapped} -> $dest"
+      exit 0
+    fi
+  fi
+fi
+
+if [[ "$scaffold_only" -eq 1 ]]; then
+  create_scaffold "$skill_name" "$dest"
+  exit 0
+fi
+
+echo "Error: skill '$skill_name' was not found in local/remote index." >&2
+echo "Use '--list' to see installable skills, or '--scaffold' to create a new template." >&2
+exit 1
