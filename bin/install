@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: bin/install <skill-name>
+
+Creates:
+  .agents/skill/<skill-name>/
+    SKILL.md
+    scripts/
+    references/
+
+Behavior:
+  - If a local source skill exists, install by copying SKILL.md + scripts + references.
+  - Otherwise create a starter scaffold.
+EOF
+}
+
+if [[ $# -ne 1 ]]; then
+  usage >&2
+  exit 1
+fi
+
+skill_name="$1"
+
+if [[ "$skill_name" =~ [[:space:]/] ]]; then
+  echo "Error: skill name must not contain spaces or '/': $skill_name" >&2
+  exit 1
+fi
+
+if [[ ! "$skill_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+  echo "Error: invalid skill name '$skill_name'." >&2
+  echo "Allowed characters: letters, numbers, dot, underscore, hyphen." >&2
+  exit 1
+fi
+
+dest=".agents/skill/$skill_name"
+
+if [[ -e "$dest" ]]; then
+  echo "Error: destination already exists: $dest" >&2
+  exit 1
+fi
+
+mkdir -p "$dest/scripts" "$dest/references"
+
+source_dir=""
+if [[ -f "$skill_name/SKILL.md" ]]; then
+  source_dir="$skill_name"
+elif [[ "$skill_name" == "linkedin" && -f "lindkedin/SKILL.md" ]]; then
+  # Backward-compatible alias for existing local skill folder name.
+  source_dir="lindkedin"
+fi
+
+if [[ -n "$source_dir" ]]; then
+  cp "$source_dir/SKILL.md" "$dest/SKILL.md"
+  if [[ -d "$source_dir/scripts" ]]; then
+    cp -a "$source_dir/scripts/." "$dest/scripts/"
+  fi
+  if [[ -d "$source_dir/references" ]]; then
+    cp -a "$source_dir/references/." "$dest/references/"
+  fi
+
+  # Keep empty dirs tracked when source had none.
+  if [[ -z "$(ls -A "$dest/scripts" 2>/dev/null)" ]]; then
+    touch "$dest/scripts/.gitkeep"
+  fi
+  if [[ -z "$(ls -A "$dest/references" 2>/dev/null)" ]]; then
+    touch "$dest/references/.gitkeep"
+  fi
+
+  echo "Installed skill from local source: $source_dir -> $dest"
+  exit 0
+fi
+
+cat >"$dest/SKILL.md" <<EOF
+---
+name: $skill_name
+description: TODO - add a short description
+---
+
+# $skill_name
+
+## Purpose
+TODO
+
+## When to use
+- TODO
+
+## Inputs
+- TODO
+
+## Steps
+1. TODO
+
+## Output
+- TODO
+EOF
+
+touch "$dest/scripts/.gitkeep" "$dest/references/.gitkeep"
+
+echo "Created starter skill scaffold at: $dest"

@@ -5,3 +5,5 @@ __pycache__/
 
 # lindkedin runtime outputs
 lindkedin/artifacts/*.json
+
+.agents
