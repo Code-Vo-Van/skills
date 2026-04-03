@@ -3,7 +3,8 @@ set -euo pipefail
 
 DEFAULT_REPO="Code-Vo-Van/skills"
 DEFAULT_REF="main"
-INDEX_FILE="skills-index.tsv"
+INDEX_FILE_JSON="skills-index.json"
+INDEX_FILE_TSV="skills-index.tsv"
 
 usage() {
   cat <<'EOF'
@@ -30,6 +31,156 @@ repo="$DEFAULT_REPO"
 ref="$DEFAULT_REF"
 scaffold_only=0
 list_only=0
+
+detect_local_index() {
+  if [[ -f "$INDEX_FILE_JSON" ]]; then
+    printf '%s|%s\n' "$INDEX_FILE_JSON" "json"
+    return 0
+  fi
+  if [[ -f "$INDEX_FILE_TSV" ]]; then
+    printf '%s|%s\n' "$INDEX_FILE_TSV" "tsv"
+    return 0
+  fi
+  return 1
+}
+
+download_remote_index() {
+  local remote_repo="$1"
+  local remote_ref="$2"
+  local outdir="$3"
+
+  local json_url="https://raw.githubusercontent.com/${remote_repo}/${remote_ref}/${INDEX_FILE_JSON}"
+  local tsv_url="https://raw.githubusercontent.com/${remote_repo}/${remote_ref}/${INDEX_FILE_TSV}"
+
+  if curl -fsSL "$json_url" -o "$outdir/index.json" 2>/dev/null; then
+    printf '%s|%s\n' "$outdir/index.json" "json"
+    return 0
+  fi
+  if curl -fsSL "$tsv_url" -o "$outdir/index.tsv" 2>/dev/null; then
+    printf '%s|%s\n' "$outdir/index.tsv" "tsv"
+    return 0
+  fi
+
+  return 1
+}
+
+lookup_skill_source_json() {
+  local query="$1"
+  local index_path="$2"
+  python3 - "$query" "$index_path" <<'PY'
+import json
+import sys
+
+query = (sys.argv[1] or "").lower()
+index_path = sys.argv[2]
+
+try:
+    with open(index_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(0)
+
+if isinstance(data, dict):
+    items = data.get("skills", [])
+elif isinstance(data, list):
+    items = data
+else:
+    items = []
+
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    if str(item.get("skill_name", "")).lower() == query:
+        print(str(item.get("source_dir", "")))
+        break
+PY
+}
+
+lookup_skill_source_tsv() {
+  local query="$1"
+  local index_path="$2"
+  awk -F'\t' -v q="$query" '
+    BEGIN { q = tolower(q) }
+    /^#/ { next }
+    NF >= 2 {
+      if (tolower($1) == q) {
+        print $2
+        exit
+      }
+    }
+  ' "$index_path"
+}
+
+lookup_skill_source() {
+  local query="$1"
+  local index_path="$2"
+  local index_format="$3"
+  if [[ "$index_format" == "json" ]]; then
+    lookup_skill_source_json "$query" "$index_path"
+  else
+    lookup_skill_source_tsv "$query" "$index_path"
+  fi
+}
+
+print_skill_list_json() {
+  local index_path="$1"
+  python3 - "$index_path" <<'PY'
+import json
+import sys
+
+index_path = sys.argv[1]
+
+try:
+    with open(index_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(0)
+
+if isinstance(data, dict):
+    items = data.get("skills", [])
+elif isinstance(data, list):
+    items = data
+else:
+    items = []
+
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    name = str(item.get("skill_name", "")).strip()
+    if not name:
+        continue
+    desc = str(item.get("description", "")).strip()
+    if desc:
+        print(f"- {name}: {desc}")
+    else:
+        print(f"- {name}")
+PY
+}
+
+print_skill_list_tsv() {
+  local index_path="$1"
+  awk -F'\t' '
+    /^#/ { next }
+    NF >= 2 {
+      desc = (NF >= 3 ? $3 : "")
+      if (desc != "") {
+        printf "- %s: %s\n", $1, desc
+      } else {
+        printf "- %s\n", $1
+      }
+    }
+  ' "$index_path"
+}
+
+print_skill_list() {
+  local index_path="$1"
+  local index_format="$2"
+  if [[ "$index_format" == "json" ]]; then
+    print_skill_list_json "$index_path"
+  else
+    print_skill_list_tsv "$index_path"
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,25 +222,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$list_only" -eq 1 ]]; then
+  if index_info="$(detect_local_index)"; then
+    IFS='|' read -r index_path index_format <<<"$index_info"
+    echo "Skills from local index (${index_path}):"
+    print_skill_list "$index_path" "$index_format"
+    exit 0
+  fi
+
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT
-  raw_index_url="https://raw.githubusercontent.com/${repo}/${ref}/${INDEX_FILE}"
-  if ! curl -fsSL "$raw_index_url" -o "$tmpdir/index.tsv" 2>/dev/null; then
-    echo "Error: could not download skill index: $raw_index_url" >&2
+  if ! index_info="$(download_remote_index "$repo" "$ref" "$tmpdir")"; then
+    echo "Error: could not download skill index: ${repo}@${ref} (${INDEX_FILE_JSON} or ${INDEX_FILE_TSV})" >&2
     exit 1
   fi
+  IFS='|' read -r index_path index_format <<<"$index_info"
   echo "Skills from ${repo}@${ref}:"
-  awk -F'\t' '
-    /^#/ { next }
-    NF >= 2 {
-      desc = (NF >= 3 ? $3 : "")
-      if (desc != "") {
-        printf "- %s: %s\n", $1, desc
-      } else {
-        printf "- %s\n", $1
-      }
-    }
-  ' "$tmpdir/index.tsv"
+  print_skill_list "$index_path" "$index_format"
   exit 0
 fi
 
@@ -108,21 +256,6 @@ if [[ ! "$skill_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
   echo "Allowed characters: letters, numbers, dot, underscore, hyphen." >&2
   exit 1
 fi
-
-lookup_skill_source() {
-  local query="$1"
-  local index_path="$2"
-  awk -F'\t' -v q="$query" '
-    BEGIN { q = tolower(q) }
-    /^#/ { next }
-    NF >= 2 {
-      if (tolower($1) == q) {
-        print $2
-        exit
-      }
-    }
-  ' "$index_path"
-}
 
 copy_skill_dir() {
   local source_dir="$1"
@@ -187,8 +320,9 @@ fi
 source_dir=""
 if [[ -f "$skill_name/SKILL.md" ]]; then
   source_dir="$skill_name"
-elif [[ -f "$INDEX_FILE" ]]; then
-  mapped="$(lookup_skill_source "$skill_name" "$INDEX_FILE")"
+elif index_info="$(detect_local_index)"; then
+  IFS='|' read -r index_path index_format <<<"$index_info"
+  mapped="$(lookup_skill_source "$skill_name" "$index_path" "$index_format")"
   if [[ -n "$mapped" && -f "$mapped/SKILL.md" ]]; then
     source_dir="$mapped"
   fi
@@ -205,9 +339,9 @@ if [[ "$scaffold_only" -ne 1 ]]; then
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT
 
-  raw_index_url="https://raw.githubusercontent.com/${repo}/${ref}/${INDEX_FILE}"
-  if curl -fsSL "$raw_index_url" -o "$tmpdir/index.tsv" 2>/dev/null; then
-    remote_mapped="$(lookup_skill_source "$skill_name" "$tmpdir/index.tsv")"
+  if download_info="$(download_remote_index "$repo" "$ref" "$tmpdir")"; then
+    IFS='|' read -r remote_index_path remote_index_format <<<"$download_info"
+    remote_mapped="$(lookup_skill_source "$skill_name" "$remote_index_path" "$remote_index_format")"
     if [[ -n "$remote_mapped" ]]; then
       archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
       curl -fsSL "$archive_url" -o "$tmpdir/repo.tar.gz"

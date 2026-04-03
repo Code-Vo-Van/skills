@@ -1,0 +1,17 @@
+[
+  {
+    "skill_name": "linkedin",
+    "source_dir": "linkedin-post",
+    "description": "LinkedIn posting flow (CDP step-by-step)"
+  },
+  {
+    "skill_name": "linkedin-post",
+    "source_dir": "linkedin-post",
+    "description": "LinkedIn posting flow (explicit folder alias)"
+  },
+  {
+    "skill_name": "lindkedin",
+    "source_dir": "linkedin-post",
+    "description": "LinkedIn posting flow (legacy alias)"
+  }
+]
