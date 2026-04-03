@@ -1,0 +1,7 @@
+.omx/
+.codex/
+tmp/
+__pycache__/
+
+# lindkedin runtime outputs
+lindkedin/artifacts/*.json
