@@ -9,7 +9,7 @@ Handling:
 1. Hỏi user bổ sung field còn thiếu.
 2. Lưu lại:
    ```bash
-   python3 lindkedin/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "..."
+   python3 linkedin-post/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "..."
    ```
 3. Chạy lại step vừa fail.
 

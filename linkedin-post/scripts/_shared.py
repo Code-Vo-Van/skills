@@ -14,10 +14,26 @@ from typing import Any, Dict, List, Optional
 import requests
 from websocket import WebSocketTimeoutException, create_connection
 
-DEFAULT_CDP_URL = os.environ.get("LINDKEDIN_CDP_URL", "").strip()
-DEFAULT_STATE_FILE = os.environ.get("LINDKEDIN_STATE_FILE", "lindkedin/artifacts/state.json")
-DEFAULT_ARTIFACTS_DIR = os.environ.get("LINDKEDIN_ARTIFACTS_DIR", "lindkedin/artifacts")
-DEFAULT_STORES_DIR = os.environ.get("LINDKEDIN_STORES_DIR", "lindkedin/stores")
+DEFAULT_CDP_URL = (
+    os.environ.get("LINKEDIN_POST_CDP_URL")
+    or os.environ.get("LINDKEDIN_CDP_URL")
+    or ""
+).strip()
+DEFAULT_STATE_FILE = (
+    os.environ.get("LINKEDIN_POST_STATE_FILE")
+    or os.environ.get("LINDKEDIN_STATE_FILE")
+    or "linkedin-post/artifacts/state.json"
+)
+DEFAULT_ARTIFACTS_DIR = (
+    os.environ.get("LINKEDIN_POST_ARTIFACTS_DIR")
+    or os.environ.get("LINDKEDIN_ARTIFACTS_DIR")
+    or "linkedin-post/artifacts"
+)
+DEFAULT_STORES_DIR = (
+    os.environ.get("LINKEDIN_POST_STORES_DIR")
+    or os.environ.get("LINDKEDIN_STORES_DIR")
+    or "linkedin-post/stores"
+)
 PROFILE_FILE_NAME = "profile.json"
 
 
@@ -97,7 +113,7 @@ def resolve_cdp_url(raw_cdp_url: Optional[str], state: Dict[str, Any], stores_di
     else:
         raise MissingUserInput(
             "Missing CDP URL. Ask user for CDP endpoint and save it (example: "
-            "python3 lindkedin/scripts/00_store_profile.py --cdp-url http://HOST:9222)."
+            "python3 linkedin-post/scripts/00_store_profile.py --cdp-url http://HOST:9222)."
         )
     return cdp_url, source, profile
 
@@ -113,7 +129,7 @@ def resolve_post_style(raw_post_style: Optional[str], stores_dir: str) -> tuple[
     else:
         raise MissingUserInput(
             "Missing post_style. Ask user for desired post style and save it "
-            "(example: python3 lindkedin/scripts/00_store_profile.py --post-style \"short, clear, friendly\")."
+            "(example: python3 linkedin-post/scripts/00_store_profile.py --post-style \"short, clear, friendly\")."
         )
     return style, source, profile
 

@@ -41,4 +41,4 @@ bin/install --scaffold my-new-skill
 
 ## Available skill(s) in this repo
 
-- `linkedin` (source folder: `lindkedin/`)
+- `linkedin` (source folder: `linkedin-post/`)

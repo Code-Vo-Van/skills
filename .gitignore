@@ -3,7 +3,7 @@
 tmp/
 __pycache__/
 
-# lindkedin runtime outputs
-lindkedin/artifacts/*.json
+# linkedin-post runtime outputs
+linkedin-post/artifacts/*.json
 
 .agents

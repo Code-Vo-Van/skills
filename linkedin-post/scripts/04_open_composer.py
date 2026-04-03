@@ -23,7 +23,7 @@ STEP = "04_open_composer"
 
 JS_SETUP_TARGET_AND_LOG = r'''
 (() => {
-  window.__lindkedinClickLog = [];
+  window.__linkedinPostClickLog = [];
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
@@ -45,7 +45,7 @@ JS_SETUP_TARGET_AND_LOG = r'''
 
   if (!pick) return { ok: false, candidateCount: candidates.length };
 
-  const record = (name, e) => window.__lindkedinClickLog.push({
+  const record = (name, e) => window.__linkedinPostClickLog.push({
     name,
     type: e.type,
     ts: Date.now(),
@@ -137,7 +137,7 @@ def main() -> None:
 
             maybe_sleep_ms(args.post_click_wait_ms)
 
-            click_log = session.eval("window.__lindkedinClickLog || []") or []
+            click_log = session.eval("window.__linkedinPostClickLog || []") or []
             markers = session.eval(js_composer_markers()) or {}
 
             auto_opened = bool(

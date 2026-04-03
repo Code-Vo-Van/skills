@@ -1,9 +1,9 @@
 ---
-name: lindkedin-post
+name: linkedin-post
 description: Điều khiển LinkedIn post flow qua CDP browser đã mở sẵn, theo từng script nhỏ (step-by-step) với fallback manual-open khi auto không ổn định.
 ---
 
-# Lindkedin Post Skill (CDP, step-by-step)
+# LinkedIn Post Skill (CDP, step-by-step)
 
 ## Khi nào dùng
 - Cần cho agent đăng bài LinkedIn bằng browser đã mở sẵn qua CDP.
@@ -22,29 +22,29 @@ description: Điều khiển LinkedIn post flow qua CDP browser đã mở sẵn,
   - `06_fill_post_text.py` là dry-run nếu chưa có `--apply`
   - `08_submit_post.py` bắt buộc `--confirm-submit`
 - Không hardcode `cdp_url`/`post_style` trong script.
-- Dùng store tại `lindkedin/stores/profile.json`.
+- Dùng store tại `linkedin-post/stores/profile.json`.
 - Nếu thiếu `cdp_url` hoặc `post_style`, **agent phải hỏi lại user** rồi lưu vào store trước khi chạy tiếp.
 
 ## Store (bắt buộc)
-- File: `lindkedin/stores/profile.json`
+- File: `linkedin-post/stores/profile.json`
   - `cdp_url`
   - `post_style`
 - Set/update nhanh:
 ```bash
-python3 lindkedin/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "short, clear, friendly"
+python3 linkedin-post/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "short, clear, friendly"
 ```
 
 ## Luồng chuẩn
 
 ### A) Auto mode (experimental)
 ```bash
-python3 lindkedin/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "..."
-python3 lindkedin/scripts/00_cdp_connect.py
-python3 lindkedin/scripts/01_pick_linkedin_tab.py
-python3 lindkedin/scripts/02_ensure_feed.py
-python3 lindkedin/scripts/03_find_start_post.py
-python3 lindkedin/scripts/04_open_composer.py
-python3 lindkedin/scripts/04b_wait_or_manual_open.py
+python3 linkedin-post/scripts/00_store_profile.py --cdp-url http://HOST:9222 --post-style "..."
+python3 linkedin-post/scripts/00_cdp_connect.py
+python3 linkedin-post/scripts/01_pick_linkedin_tab.py
+python3 linkedin-post/scripts/02_ensure_feed.py
+python3 linkedin-post/scripts/03_find_start_post.py
+python3 linkedin-post/scripts/04_open_composer.py
+python3 linkedin-post/scripts/04b_wait_or_manual_open.py
 ```
 
 Nếu `04/04b` không mở được feed composer, script sẽ tự fallback sang `article/new` (article mode) rồi tiếp tục flow.
@@ -53,14 +53,14 @@ Nếu `04/04b` không mở được feed composer, script sẽ tự fallback san
 1. Mở composer thủ công trên tab LinkedIn ("Start a post").
 2. Tiếp tục:
 ```bash
-python3 lindkedin/scripts/05_find_composer_editor.py
-python3 lindkedin/scripts/06_fill_post_text.py --text "Hello from agent" --post-style "..." --apply
-python3 lindkedin/scripts/07_check_post_ready.py
+python3 linkedin-post/scripts/05_find_composer_editor.py
+python3 linkedin-post/scripts/06_fill_post_text.py --text "Hello from agent" --post-style "..." --apply
+python3 linkedin-post/scripts/07_check_post_ready.py
 ```
 3. Submit thật (chỉ khi chắc chắn):
 ```bash
-python3 lindkedin/scripts/08_submit_post.py --confirm-submit
-python3 lindkedin/scripts/09_capture_post_result.py
+python3 linkedin-post/scripts/08_submit_post.py --confirm-submit
+python3 linkedin-post/scripts/09_capture_post_result.py
 ```
 
 > `07/08` hiện hỗ trợ cả 2 mode:
@@ -84,9 +84,9 @@ python3 lindkedin/scripts/09_capture_post_result.py
 
 ## Tham số dùng chung
 - `--cdp-url`
-- `--stores-dir` (default: `lindkedin/stores`)
-- `--state-file` (default: `lindkedin/artifacts/state.json`)
-- `--artifacts-dir` (default: `lindkedin/artifacts`)
+- `--stores-dir` (default: `linkedin-post/stores`)
+- `--state-file` (default: `linkedin-post/artifacts/state.json`)
+- `--artifacts-dir` (default: `linkedin-post/artifacts`)
 - `--timeout-ms`
 
 ## Khi thất bại
@@ -97,4 +97,4 @@ python3 lindkedin/scripts/09_capture_post_result.py
 
 ## Output & artifacts
 - Mỗi step in JSON result ra stdout.
-- Mỗi step ghi artifact JSON timestamped trong `lindkedin/artifacts/`.
+- Mỗi step ghi artifact JSON timestamped trong `linkedin-post/artifacts/`.
