@@ -8,6 +8,7 @@ from _shared import (
     emit_and_exit,
     js_composer_markers,
     load_state,
+    maybe_sleep_ms,
     open_cdp_from_state,
     resolve_cdp_url,
     state_set,
@@ -55,9 +56,42 @@ JS_FIND_EDITORS = r'''
 })()
 '''
 
+JS_ARTICLE_EDITOR_SCAN = r'''
+(() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden';
+  };
+  const titleEditor = document.querySelector('textarea[placeholder="Title"],textarea.article-editor-headline__textarea');
+  const bodyEditor = document.querySelector('div[role="textbox"][aria-label="Article editor content"],div.ProseMirror[contenteditable="true"]');
+  return {
+    url: location.href,
+    title: document.title,
+    isArticlePage: /\/article\//.test(location.pathname),
+    titleEditor: titleEditor ? {
+      visible: visible(titleEditor),
+      tag: titleEditor.tagName.toLowerCase(),
+      placeholder: titleEditor.getAttribute('placeholder'),
+      className: (titleEditor.className || '').toString().slice(0, 180),
+    } : null,
+    bodyEditor: bodyEditor ? {
+      visible: visible(bodyEditor),
+      tag: bodyEditor.tagName.toLowerCase(),
+      role: bodyEditor.getAttribute('role'),
+      aria: bodyEditor.getAttribute('aria-label'),
+      className: (bodyEditor.className || '').toString().slice(0, 180),
+    } : null,
+  };
+})()
+'''
+
 
 def main() -> None:
     parser = common_parser("Find visible composer editor")
+    parser.add_argument("--article-fallback-url", default="https://www.linkedin.com/article/new/")
+    parser.add_argument("--article-fallback-wait-ms", type=int, default=5000)
+    parser.add_argument("--no-article-fallback", action="store_true")
     args = parser.parse_args()
 
     state = load_state(args.state_file)
@@ -68,18 +102,41 @@ def main() -> None:
         try:
             markers = session.eval(js_composer_markers()) or {}
             editors = session.eval(JS_FIND_EDITORS) or {}
-            selected = (editors.get("visibleEditors") or [None])[0]
+            article_scan = session.eval(JS_ARTICLE_EDITOR_SCAN) or {}
+            selected_feed_editor = (editors.get("visibleEditors") or [None])[0]
+
+            selected = None
+            post_mode = None
+            if article_scan.get("titleEditor") and article_scan.get("bodyEditor") and article_scan.get("isArticlePage"):
+                selected = article_scan.get("bodyEditor")
+                post_mode = "article_post"
+            elif selected_feed_editor:
+                selected = selected_feed_editor
+                post_mode = "feed_post"
+            elif not args.no_article_fallback:
+                session.navigate(args.article_fallback_url)
+                maybe_sleep_ms(args.article_fallback_wait_ms)
+                markers = session.eval(js_composer_markers()) or {}
+                editors = session.eval(JS_FIND_EDITORS) or {}
+                article_scan = session.eval(JS_ARTICLE_EDITOR_SCAN) or {}
+                if article_scan.get("titleEditor") and article_scan.get("bodyEditor") and article_scan.get("isArticlePage"):
+                    selected = article_scan.get("bodyEditor")
+                    post_mode = "article_post"
 
             evidence = {
                 "cdp_url": cdp_url,
                 "cdp_source": source,
                 "markers": markers,
+                "post_mode": post_mode,
                 "editor_scan": {
                     "total": editors.get("total", 0),
                     "visibleCount": editors.get("visibleCount", 0),
                     "visibleEditors": editors.get("visibleEditors", []),
                 },
+                "article_scan": article_scan,
                 "selected_editor": selected,
+                "article_fallback_attempted": bool(not selected_feed_editor and not args.no_article_fallback),
+                "article_fallback_url": args.article_fallback_url,
             }
             artifact = write_artifact(args.artifacts_dir, "05-find-editor", evidence)
             evidence["artifact"] = artifact
@@ -92,11 +149,11 @@ def main() -> None:
                     step=STEP,
                     status="retryable",
                     evidence=evidence,
-                    next_action="04b_wait_or_manual_open.py",
-                    error="No visible composer editor found",
+                    next_action="04b_wait_or_manual_open.py or manual_open_required",
+                    error="No feed/article editor found",
                 ))
 
-            state_set(args.state_file, selected_editor=selected)
+            state_set(args.state_file, selected_editor=selected, post_mode=post_mode)
             emit_and_exit(step_result(
                 step=STEP,
                 status="ok",

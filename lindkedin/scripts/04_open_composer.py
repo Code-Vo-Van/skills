@@ -157,7 +157,11 @@ def main() -> None:
             artifact = write_artifact(args.artifacts_dir, "04-open-composer", evidence)
             evidence["artifact"] = artifact
 
-            state_set(args.state_file, open_composer_last=evidence)
+            state_set(
+                args.state_file,
+                open_composer_last=evidence,
+                post_mode="feed_post" if auto_opened else state.get("post_mode"),
+            )
             if args.cdp_url:
                 update_profile_fields(args.stores_dir, cdp_url=cdp_url)
             update_state(args.state_file, STEP, evidence)

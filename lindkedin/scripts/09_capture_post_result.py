@@ -29,6 +29,7 @@ def main() -> None:
         cdp_url, source, _profile = resolve_cdp_url(args.cdp_url, state, args.stores_dir)
         session, tab = open_cdp_from_state(cdp_url, state)
         try:
+            post_mode = str(state.get("post_mode") or "").strip() or "feed_post"
             page = session.eval(r'''(() => ({url: location.href, title: document.title, ready: document.readyState}))()''') or {}
             markers = session.eval(js_composer_markers()) or {}
             snippet = session.eval(r'''(() => ((document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 500)))()''') or ""
@@ -50,10 +51,16 @@ def main() -> None:
             evidence = {
                 "cdp_url": cdp_url,
                 "cdp_source": source,
+                "post_mode": post_mode,
                 "page": page,
                 "markers": markers,
                 "toast": toast,
                 "snippet": snippet,
+                "published_guess": bool(
+                    "/pulse/" in str(page.get("url") or "")
+                    or "published=t" in str(page.get("url") or "")
+                    or "congrats on publishing" in snippet.lower()
+                ),
             }
             artifact = write_artifact(args.artifacts_dir, "09-capture-post-result", evidence)
             evidence["artifact"] = artifact

@@ -47,7 +47,7 @@ python3 lindkedin/scripts/04_open_composer.py
 python3 lindkedin/scripts/04b_wait_or_manual_open.py
 ```
 
-Nếu `04/04b` vẫn `retryable` → chuyển mode B.
+Nếu `04/04b` không mở được feed composer, script sẽ tự fallback sang `article/new` (article mode) rồi tiếp tục flow.
 
 ### B) Assisted mode (ổn định hơn)
 1. Mở composer thủ công trên tab LinkedIn ("Start a post").
@@ -62,6 +62,10 @@ python3 lindkedin/scripts/07_check_post_ready.py
 python3 lindkedin/scripts/08_submit_post.py --confirm-submit
 python3 lindkedin/scripts/09_capture_post_result.py
 ```
+
+> `07/08` hiện hỗ trợ cả 2 mode:
+> - `feed_post`: tìm/click nút **Post**
+> - `article_post`: click **Next** rồi **Publish**
 
 ## Script map
 - `00_store_profile.py`: lưu `cdp_url` + `post_style` vào store

@@ -21,11 +21,33 @@ from _shared import (
 
 STEP = "04b_wait_or_manual_open"
 
+JS_ARTICLE_SCAN = r'''
+(() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden';
+  };
+  const titleEditor = document.querySelector('textarea[placeholder="Title"],textarea.article-editor-headline__textarea');
+  const bodyEditor = document.querySelector('div[role="textbox"][aria-label="Article editor content"],div.ProseMirror[contenteditable="true"]');
+  return {
+    url: location.href,
+    title: document.title,
+    isArticlePage: /\/article\//.test(location.pathname),
+    titleEditorVisible: !!(titleEditor && visible(titleEditor)),
+    bodyEditorVisible: !!(bodyEditor && visible(bodyEditor)),
+  };
+})()
+'''
+
 
 def main() -> None:
     parser = common_parser("Wait for composer markers; fallback to manual-open required")
     parser.add_argument("--poll-interval-ms", type=int, default=1000)
     parser.add_argument("--max-wait-ms", type=int, default=15000)
+    parser.add_argument("--article-fallback-url", default="https://www.linkedin.com/article/new/")
+    parser.add_argument("--article-fallback-wait-ms", type=int, default=5000)
+    parser.add_argument("--no-article-fallback", action="store_true")
     args = parser.parse_args()
 
     state = load_state(args.state_file)
@@ -70,12 +92,36 @@ def main() -> None:
                 update_profile_fields(args.stores_dir, cdp_url=cdp_url)
 
             if opened:
+                state_set(args.state_file, post_mode="feed_post", manual_open_required=False)
                 emit_and_exit(step_result(
                     step=STEP,
                     status="ok",
                     evidence=evidence,
                     next_action="05_find_composer_editor.py",
                 ))
+
+            article_fallback = {"attempted": False, "ok": False}
+            if not args.no_article_fallback:
+                article_fallback["attempted"] = True
+                session.navigate(args.article_fallback_url)
+                time.sleep(max(0.1, args.article_fallback_wait_ms / 1000.0))
+                article_scan = session.eval(JS_ARTICLE_SCAN) or {}
+                article_ok = bool(article_scan.get("isArticlePage")) and bool(article_scan.get("titleEditorVisible")) and bool(article_scan.get("bodyEditorVisible"))
+                article_fallback.update({
+                    "ok": article_ok,
+                    "scan": article_scan,
+                    "url": args.article_fallback_url,
+                })
+                evidence["article_fallback"] = article_fallback
+                if article_ok:
+                    state_set(args.state_file, post_mode="article_post", manual_open_required=False)
+                    update_state(args.state_file, STEP, evidence)
+                    emit_and_exit(step_result(
+                        step=STEP,
+                        status="ok",
+                        evidence=evidence,
+                        next_action="05_find_composer_editor.py",
+                    ))
 
             manual_hint = (
                 "Composer not detected. Manually click 'Start a post' in browser, "
